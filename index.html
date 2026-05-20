@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>AR Physio Coach - Advanced Suite</title>
+    <style>
+        body {
+            background-color: #111111;
+            color: #00FF00;
+            font-family: sans-serif;
+            text-align: center;
+            padding-top: 20px;
+        }
+        #control-panel {
+            background-color: #222;
+            padding: 15px;
+            border-radius: 8px;
+            width: 610px;
+            margin: 0 auto 15px auto;
+            border: 2px solid #333;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+        }
+        label {
+            color: #FFF;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+        select, input {
+            background-color: #111;
+            color: #00FF00;
+            border: 1px solid #00FF00;
+            padding: 8px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        #video-container {
+            position: relative;
+            width: 640px;
+            height: 480px;
+            margin: 0 auto;
+        }
+        video, canvas {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 10px;
+            transform: scaleX(-1);
+        }
+        video { border: 2px solid #333; }
+        canvas { z-index: 10; }
+        #data-box {
+            background-color: #222;
+            padding: 15px;
+            border-radius: 5px;
+            width: 340px;
+            margin: 20px auto;
+            border: 3px solid #00FF00;
+            font-family: monospace;
+            font-size: 18px;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+</head>
+
+<body>
+
+    <h1>AR AI Multi-Exercise Coach</h1>
+
+    <div id="control-panel">
+        <div>
+            <label for="exercise-select">EXERCISE:</label>
+            <select id="exercise-select" onchange="resetCounters()">
+                <option value="left_curl">Left Bicep Curl</option>
+                <option value="right_curl">Right Bicep Curl</option>
+                <option value="squat">Squats</option>
+            </select>
+        </div>
+        <div>
+            <label for="target-input">TARGET GOAL:</label>
+            <input type="number" id="target-input" value="5" min="1" style="width: 60px;">
+        </div>
+        <div>
+            <button onclick="resetCounters()">RESET WORKOUT</button>
+        </div>
+    </div>
+    
+    <div id="video-container">
+        <video id="webcam" autoplay playsinline></video>
+        <canvas id="skeleton-canvas" width="640" height="480"></canvas>
+    </div>
+    
+    <div id="data-box">Analyzing Posture...</div>
+
+    <script>
+        const videoBox = document.getElementById('webcam');
+        const canvasElement = document.getElementById('skeleton-canvas');
+        const canvasCtx = canvasElement.getContext('2d'); 
+        const dataDisplay = document.getElementById('data-box');
+        const exerciseSelect = document.getElementById('exercise-select');
+        const targetInput = document.getElementById('target-input');
+
+        let repCount = 0;
+        let exerciseStage = "up"; 
+        let workoutComplete = false;
+
+        function resetCounters() {
+            repCount = 0;
+            exerciseStage = "up";
+            workoutComplete = false;
+            dataDisplay.style.borderColor = "#00FF00";
+            dataDisplay.style.color = "#00FF00";
+        }
+
+        function sayOutFloud(sentenceText) {
+            if (window.speechSynthesis.speaking) {
+                return; 
+            }
+            let vocalTape = new SpeechSynthesisUtterance(sentenceText);
+            window.speechSynthesis.speak(vocalTape);
+        }
+
+        function calculateAngle(A, B, C) {
+            let v1 = { x: A.x - B.x, y: A.y - B.y, z: A.z - B.z };
+            let v2 = { x: C.x - B.x, y: C.y - B.y, z: C.z - B.z };
+            let dotProduct = (v1.x * v2.x) + (v1.y * v2.y) + (v1.z * v2.z);
+            let mag1 = Math.sqrt(v1.x * v1.x + v1.y * v1.y + v1.z * v1.z);
+            let mag2 = Math.sqrt(v2.x * v2.x + v2.y * v2.y + v2.z * v2.z);
+            let cosAngle = dotProduct / (mag1 * mag2);
+            
+            if (cosAngle > 1.0) cosAngle = 1.0;
+            if (cosAngle < -1.0) cosAngle = -1.0;
+
+            let radians = Math.acos(cosAngle);
+            return (radians * 180.0) / Math.PI;
+        }
+
+        function onGotBodyPoints(results) {
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+            if (workoutComplete) {
+                dataDisplay.style.borderColor = "#00FF00";
+                dataDisplay.style.color = "#00FF00";
+                dataDisplay.innerHTML = `
+                    <b>WORKOUT COMPLETE!</b><br>
+                    <b>TOTAL REPS:</b> ${repCount}<br>
+                    <b>STATUS:</b> Great work! Change exercise to restart.
+                `;
+                return;
+            }
+
+            if (results.poseLandmarks) {
+                let pA, pB, pC;
+                const currentExercise = exerciseSelect.value;
+                const targetGoal = parseInt(targetInput.value) || 5;
+
+                if (currentExercise === "left_curl") {
+                    pA = results.poseLandmarks[11]; 
+                    pB = results.poseLandmarks[13];    
+                    pC = results.poseLandmarks[15];    
+                } else if (currentExercise === "right_curl") {
+                    pA = results.poseLandmarks[12]; 
+                    pB = results.poseLandmarks[14];    
+                    pC = results.poseLandmarks[16];    
+                } else if (currentExercise === "squat") {
+                    pA = results.poseLandmarks[24]; 
+                    pB = results.poseLandmarks[26];    
+                    pC = results.poseLandmarks[28];    
+                }
+
+                const currentAngle = calculateAngle(pA, pB, pC);
+
+                if (isNaN(currentAngle) || pA.visibility < 0.4 || pB.visibility < 0.4 || pC.visibility < 0.4) {
+                    dataDisplay.style.borderColor = "red";
+                    dataDisplay.style.color = "red";
+                    dataDisplay.innerHTML = `
+                        <b>REPS:</b> ${repCount} / ${targetGoal}<br>
+                        <b>ANGLE:</b> Tracking Lost...<br>
+                        <b>STATUS:</b> Please ensure your target joints are fully visible!
+                    `;
+                    return; 
+                }
+
+                let boneColor = "red"; 
+                let postureStatus = "INCORRECT POSITION";
+
+                if (currentExercise === "left_curl" || currentExercise === "right_curl") {
+                    postureStatus = "INCORRECT (BEND MORE)";
+                    if (currentAngle < 90) {
+                        boneColor = "#00FF00"; 
+                        postureStatus = "PERFECT FORM! GO GREEN!";
+                        exerciseStage = "down";
+                    }
+                    if (currentAngle > 150 && exerciseStage === "down") {
+                        exerciseStage = "up"; 
+                        repCount = repCount + 1; 
+                        if (repCount >= targetGoal) {
+                            workoutComplete = true;
+                            sayOutFloud(`Workout complete! Great work!`);
+                        } else {
+                            sayOutFloud(`Repetition ${repCount}`);
+                        }
+                    }
+                } else if (currentExercise === "squat") {
+                    postureStatus = "INCORRECT (SQUAT DEEPER)";
+                    if (currentAngle < 100) {
+                        boneColor = "#00FF00"; 
+                        postureStatus = "GREAT DEPTH! GO GREEN!";
+                        exerciseStage = "down";
+                    }
+                    if (currentAngle > 160 && exerciseStage === "down") {
+                        exerciseStage = "up"; 
+                        repCount = repCount + 1; 
+                        if (repCount >= targetGoal) {
+                            workoutComplete = true;
+                            sayOutFloud(`Workout complete! Great work!`);
+                        } else {
+                            sayOutFloud(`Repetition ${repCount}`);
+                        }
+                    }
+                }
+
+                const sX = pA.x * canvasElement.width;
+                const sY = pA.y * canvasElement.height;
+                const eX = pB.x * canvasElement.width;
+                const eY = pB.y * canvasElement.height;
+                const wX = pC.x * canvasElement.width;
+                const wY = pC.y * canvasElement.height;
+
+                canvasCtx.beginPath();
+                canvasCtx.moveTo(sX, sY);
+                canvasCtx.lineTo(eX, eY);
+                canvasCtx.strokeStyle = boneColor;
+                canvasCtx.lineWidth = 6;
+                canvasCtx.stroke();
+
+                canvasCtx.beginPath();
+                canvasCtx.moveTo(eX, eY);
+                canvasCtx.lineTo(wX, wY);
+                canvasCtx.strokeStyle = boneColor;
+                canvasCtx.lineWidth = 6;
+                canvasCtx.stroke();
+
+                drawJointPoint(sX, sY);
+                drawJointPoint(eX, eY);
+                drawJointPoint(wX, wY);
+
+                dataDisplay.style.borderColor = boneColor;
+                dataDisplay.style.color = boneColor;
+                dataDisplay.innerHTML = `
+                    <b>TOTAL REPS:</b> ${repCount} / ${targetGoal}<br>
+                    <b>JOINT ANGLE:</b> ${Math.round(currentAngle)}°<br>
+                    <b>STATUS:</b> ${postureStatus}
+                `;
+            }
+        }
+
+        function drawJointPoint(x, y) {
+            canvasCtx.beginPath();
+            canvasCtx.arc(x, y, 8, 0, 2 * Math.PI);
+            canvasCtx.fillStyle = "white"; 
+            canvasCtx.fill();
+        }
+
+        const poseEngine = new Pose({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+        });
+
+        poseEngine.setOptions({
+            modelComplexity: 1,
+            smoothLandmarks: true,
+            minDetectionConfidence: 0.4, 
+            minTrackingConfidence: 0.4    
+        });
+
+        poseEngine.onResults(onGotBodyPoints);
+
+        const cameraFlipbook = new Camera(videoBox, {
+            onFrame: async () => {
+                await poseEngine.send({ image: videoBox });
+            },
+            width: 640, 
+            height: 480
+        });
+        cameraFlipbook.start();
+    </script>
+</body>
+
+</html>
