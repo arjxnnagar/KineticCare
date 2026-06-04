@@ -1,5 +1,6 @@
 import React from 'react'
 import About from './About'
+import { Link } from 'react-router-dom'
 import Instructions from './Instructions'
 
 const Hero = () => {
@@ -13,9 +14,11 @@ const Hero = () => {
                     <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris </p>
                 </div>
                 <div className='flex gap-6 mt-5'>
+                    <Link to="/exercises">
                     <button className="px-7 py-2.5 text-white text-[16px] font-normal bg-linear-to-r drop-shadow-md/15 from-[#63b3ff] to-[#0047d9] transition-all duration-200 hover:opacity-95 hover:-translate-y-px ">
                         Get Started
                     </button>
+                    </Link>
                     <button className="px-7 py-2.5 drop-shadow-2xl/30 text-[16px] font-normal text-black transition-all duration-200 hover:opacity-95 hover:-translate-y-px ">
                         Learn More
                     </button>
