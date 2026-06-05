@@ -169,7 +169,7 @@
         document.getElementById('video-container').appendChild(threeCanvas);
 
         const scene = new THREE.Scene();
-        const camera = new THREE.OrthographicCamera(0, 640, 480, 0, -1000, 1000);
+        const camera = new THREE.OrthographicCamera(0, 640, 0, 480, -1000, 1000);
         const renderer = new THREE.WebGLRenderer({ canvas: threeCanvas, alpha: true, antialias: true });
         renderer.setSize(640, 480);
 
@@ -301,7 +301,7 @@
 
                 const angle = calculateAngle(pA, pB, pC);
 
-                if (isNaN(angle) || pA.visibility < 0.4 || pB.visibility < 0.4 || pC.visibility < 0.4) {
+                if (isNaN(angle) || pA.visibility < 0.55 || pB.visibility < 0.55 || pC.visibility < 0.55) {
 
                     arRingA.visible = false;
                     arRingB.visible = false;
